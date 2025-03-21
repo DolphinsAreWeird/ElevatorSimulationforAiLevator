@@ -124,5 +124,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentFloor: 0
+  homeFloor: 0
   targetFloor: 0
+  weight: 70
   moveSpeed: 2
+  floorHeight: 3
+  minWaitTime: 5
+  maxWaitTime: 15
+  baseElevatorUsageProbability: 0.1
+  peakHourMultiplier: 1
+  lunchTimeMultiplier: 1
+  perFloorDistanceBonus: 0.1
+  maxElevatorUsageProbability: 0.9
+  elevatorPreference: 0
+  buildingSize: {x: 20, y: 20}
+  wallDetectionDistance: 1
+  availableElevators: []

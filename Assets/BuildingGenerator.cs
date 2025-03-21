@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class EnhancedBuildingGenerator : MonoBehaviour
@@ -20,10 +21,17 @@ public class EnhancedBuildingGenerator : MonoBehaviour
     public int minPeoplePerFloor = 2;
     public int maxPeoplePerFloor = 5;
     
+    [Header("Visualization Settings")]
+    [Range(0f, 1f)]
+    public float wallTransparency = 0.3f; // How transparent the walls should be
+    public bool showWalls = true; // Toggle wall visibility
+    public Color wallColor = new Color(0.8f, 0.8f, 0.9f); // Light blue walls
+    
     // References to generated objects
     private List<GameObject> floors = new List<GameObject>();
     private List<Elevator> elevators = new List<Elevator>();
     private List<EnhancedPerson> people = new List<EnhancedPerson>();
+    private List<GameObject> walls = new List<GameObject>();
     
     // References to managers
     private ElevatorController elevatorController;
@@ -41,6 +49,90 @@ public class EnhancedBuildingGenerator : MonoBehaviour
             
             // Now generate the building
             GenerateBuilding();
+            
+            // ADDED: Force an elevator to move after setup
+            StartCoroutine(TestElevatorsAfterInitialization());
+            
+            // Set wall transparency according to settings
+            UpdateWallVisibility();
+        }
+    }
+    
+    // Update method to handle user input for wall visibility
+    void Update()
+    {
+        // Toggle wall visibility when W key is pressed
+        if (Input.GetKeyDown(KeyCode.W))
+        {
+            showWalls = !showWalls;
+            UpdateWallVisibility();
+            Debug.Log("Wall visibility toggled: " + showWalls);
+        }
+        
+        // Increase transparency with + key
+        if (Input.GetKeyDown(KeyCode.Equals)) // + key
+        {
+            wallTransparency = Mathf.Clamp01(wallTransparency + 0.1f);
+            UpdateWallVisibility();
+            Debug.Log("Wall transparency: " + wallTransparency);
+        }
+        
+        // Decrease transparency with - key
+        if (Input.GetKeyDown(KeyCode.Minus)) // - key
+        {
+            wallTransparency = Mathf.Clamp01(wallTransparency - 0.1f);
+            UpdateWallVisibility();
+            Debug.Log("Wall transparency: " + wallTransparency);
+        }
+    }
+    
+    // Update wall visibility based on settings
+    private void UpdateWallVisibility()
+    {
+        foreach (GameObject wall in walls)
+        {
+            if (wall != null)
+            {
+                Renderer renderer = wall.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    // Set material's transparency based on settings
+                    Color color = wallColor;
+                    color.a = showWalls ? wallTransparency : 0f;
+                    
+                    // Create or modify material to be transparent
+                    Material mat = renderer.material;
+                    mat.color = color;
+                    
+                    // Set the appropriate rendering mode based on transparency
+                    if (wallTransparency < 1.0f)
+                    {
+                        mat.SetFloat("_Mode", 3); // Transparent mode
+                        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                        mat.SetInt("_ZWrite", 0);
+                        mat.DisableKeyword("_ALPHATEST_ON");
+                        mat.EnableKeyword("_ALPHABLEND_ON");
+                        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                        mat.renderQueue = 3000;
+                    }
+                    
+                    // Apply the updated material
+                    renderer.material = mat;
+                }
+            }
+        }
+    }
+    
+    // ADDED: Test the elevators after initialization
+    private IEnumerator TestElevatorsAfterInitialization()
+    {
+        yield return new WaitForSeconds(2.0f);
+        
+        if (elevators.Count > 0)
+        {
+            Debug.Log("Testing elevator movement after initialization");
+            elevators[0].RequestFloor(1);
         }
     }
     
@@ -68,6 +160,16 @@ public class EnhancedBuildingGenerator : MonoBehaviour
                 Destroy(controller.gameObject);
             }
         }
+        
+        // Find and destroy any existing walls
+        foreach (GameObject wall in walls)
+        {
+            if (wall != null)
+            {
+                Destroy(wall);
+            }
+        }
+        walls.Clear();
     }
     
     public void GenerateBuilding()
@@ -109,9 +211,15 @@ public class EnhancedBuildingGenerator : MonoBehaviour
             if (person != null) Destroy(person.gameObject);
         }
         
+        foreach (var wall in walls)
+        {
+            if (wall != null) Destroy(wall);
+        }
+        
         floors.Clear();
         elevators.Clear();
         people.Clear();
+        walls.Clear();
         
         // Also destroy elevator controller if it exists
         if (elevatorController != null)
@@ -139,6 +247,28 @@ public class EnhancedBuildingGenerator : MonoBehaviour
             
             // Scale floor to desired size
             floor.transform.localScale = new Vector3(floorSize.x, 0.1f, floorSize.y);
+            
+            // Make floor semi-transparent to see through
+            Renderer floorRenderer = floor.GetComponent<Renderer>();
+            if (floorRenderer != null)
+            {
+                // Use a slightly transparent material for the floor
+                Material floorMat = floorRenderer.material;
+                Color floorColor = new Color(0.9f, 0.9f, 0.9f, 0.7f);
+                floorMat.color = floorColor;
+                
+                // Set up transparent rendering
+                floorMat.SetFloat("_Mode", 3); // Transparent mode
+                floorMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                floorMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                floorMat.SetInt("_ZWrite", 0);
+                floorMat.DisableKeyword("_ALPHATEST_ON");
+                floorMat.EnableKeyword("_ALPHABLEND_ON");
+                floorMat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                floorMat.renderQueue = 3000;
+                
+                floorRenderer.material = floorMat;
+            }
             
             floors.Add(floor);
             
@@ -197,10 +327,34 @@ public class EnhancedBuildingGenerator : MonoBehaviour
         wall.transform.localScale = size;
         wall.name = "Wall";
         
-        // Set wall tag and layer for collision detection
-        wall.tag = "Wall";
+        // Set wall layer for collision detection
+        wall.layer = LayerMask.NameToLayer("Default");
         
-        // Add collider for physics interactions (it's already added by CreatePrimitive)
+        // Add to walls list for easy management
+        walls.Add(wall);
+        
+        // Set up transparent material
+        Renderer renderer = wall.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Material wallMat = renderer.material;
+            Color transparentColor = wallColor;
+            transparentColor.a = wallTransparency;
+            
+            wallMat.color = transparentColor;
+            
+            // Set up transparency
+            wallMat.SetFloat("_Mode", 3); // Transparent mode
+            wallMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            wallMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            wallMat.SetInt("_ZWrite", 0);
+            wallMat.DisableKeyword("_ALPHATEST_ON");
+            wallMat.EnableKeyword("_ALPHABLEND_ON");
+            wallMat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            wallMat.renderQueue = 3000;
+            
+            renderer.material = wallMat;
+        }
     }
     
     private void GenerateElevators()
@@ -297,6 +451,11 @@ public class EnhancedBuildingGenerator : MonoBehaviour
                 personComp.availableElevators = new List<Elevator>(elevators);
                 personComp.buildingSize = floorSize;
                 
+                // ADDED: Make people more likely to use elevators
+                personComp.baseElevatorUsageProbability = 0.7f;
+                personComp.minWaitTime = 5f; // Make them more active
+                personComp.maxWaitTime = 10f;
+                
                 people.Add(personComp);
                 totalPeople++;
             }
@@ -323,6 +482,33 @@ public class EnhancedBuildingGenerator : MonoBehaviour
                 Debug.LogWarning($"Fixed missing elevator reference for {person.name}");
             }
         }
+        
+        // ADDED: Make a few people immediately use elevators
+        StartCoroutine(ForcePeopleToUseElevators());
+    }
+    
+    // ADDED: Force some people to use elevators right away
+    private IEnumerator ForcePeopleToUseElevators()
+    {
+        // Wait a bit for the simulation to settle
+        yield return new WaitForSeconds(3.0f);
+        
+        // Make 3 random people use elevators
+        int usageCount = Mathf.Min(3, people.Count);
+        for (int i = 0; i < usageCount; i++)
+        {
+            if (i < people.Count)
+            {
+                EnhancedPerson person = people[i];
+                int currentFloor = person.currentFloor;
+                int targetFloor = (currentFloor + 1) % numberOfFloors;
+                
+                Debug.Log($"Forcing person {person.name} to request elevator to floor {targetFloor}");
+                person.GoToFloor(targetFloor);
+                
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
     }
 
     // Draw gizmos to show building layout in editor
@@ -344,6 +530,14 @@ public class EnhancedBuildingGenerator : MonoBehaviour
             float elevatorZ = startZ + i * elevatorSpacing;
             Vector3 elevatorPos = new Vector3(-halfWidth - 1.5f, 0, elevatorZ);
             Gizmos.DrawCube(elevatorPos + new Vector3(0, 1.25f, 0), new Vector3(1.8f, 2.5f, 1.8f));
+        }
+        
+        // Show floor heights
+        for (int i = 0; i < numberOfFloors; i++)
+        {
+            float y = i * floorHeight;
+            Gizmos.color = new Color(0.7f, 0.7f, 0.7f, 0.5f);
+            Gizmos.DrawWireCube(new Vector3(0, y, 0), new Vector3(floorSize.x, 0.1f, floorSize.y));
         }
     }
 }
@@ -368,10 +562,31 @@ public class ElevatorController : MonoBehaviour
                     Debug.Log($"Elevator {i} position: {elevators[i].transform.position}");
                 }
             }
+            
+            // ADDED: Test elevators are responsive
+            StartCoroutine(TestElevators());
         }
         else
         {
             Debug.LogWarning("Elevator Controller has no elevators assigned!");
+        }
+    }
+    
+    // ADDED: Test elevators after initialization
+    private IEnumerator TestElevators()
+    {
+        yield return new WaitForSeconds(1.0f);
+        
+        if (elevators != null && elevators.Length > 0)
+        {
+            Debug.Log("Controller testing elevators...");
+            for (int i = 0; i < elevators.Length; i++)
+            {
+                int targetFloor = elevators[i].CurrentFloor == 0 ? 1 : 0;
+                Debug.Log($"Controller requesting elevator {i} to move to floor {targetFloor}");
+                elevators[i].RequestFloor(targetFloor);
+                yield return new WaitForSeconds(0.5f);
+            }
         }
     }
     
@@ -402,6 +617,19 @@ public class ElevatorController : MonoBehaviour
             }
         }
         
-        return bestElevator ?? elevators[0]; // Default to first elevator if none found
+        // IMPROVED: More robust handling of null elevators
+        if (bestElevator == null && elevators.Length > 0)
+        {
+            for (int i = 0; i < elevators.Length; i++)
+            {
+                if (elevators[i] != null)
+                {
+                    bestElevator = elevators[i];
+                    break;
+                }
+            }
+        }
+        
+        return bestElevator; // May still be null if all elevators are null
     }
 }

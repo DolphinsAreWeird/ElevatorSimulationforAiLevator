@@ -115,18 +115,35 @@ public class Elevator : MonoBehaviour
         isInitialized = true;
     }
 
+    // ADDED: Debug update method to periodically check for stuck elevators
+    void Update()
+    {
+        // Every 5 seconds, check if we have requested floors but aren't moving
+        if (Time.frameCount % 300 == 0) {
+            if (requestedFloors.Count > 0 && !isMoving) {
+                Debug.LogWarning($"Elevator {gameObject.name} has {requestedFloors.Count} pending floors but isn't moving. Restarting movement.");
+                if (moveCoroutine != null) {
+                    StopCoroutine(moveCoroutine);
+                }
+                moveCoroutine = StartCoroutine(MoveElevator());
+            }
+        }
+    }
+
     // Check if the elevator can accept more passengers
     public bool CanEnter(float weight)
     {
         // Check if doors are open
         if (!doorsOpen)
         {
+            Debug.LogWarning($"Cannot enter elevator {gameObject.name} because doors are closed");
             return false;
         }
         
         // Check weight limit
         if (currentWeight + weight > maxWeight)
         {
+            Debug.LogWarning($"Cannot enter elevator {gameObject.name} because it would exceed weight limit");
             return false;
         }
         
@@ -144,6 +161,7 @@ public class Elevator : MonoBehaviour
         // Check capacity limit
         if (passengerCount >= capacity)
         {
+            Debug.LogWarning($"Cannot enter elevator {gameObject.name} because it is at capacity ({passengerCount}/{capacity})");
             return false;
         }
         
@@ -202,23 +220,39 @@ public class Elevator : MonoBehaviour
             return;
         }
         
+        // IMPROVED: Extra debug info
+        Debug.Log($"Elevator {gameObject.name} received request for floor {floor}. Current floor: {currentFloor}, Moving: {isMoving}, Status: {elevatorStatus}");
+        
         // Add floor to requested floors if not already there and not current floor
         if (!requestedFloors.Contains(floor) && floor != currentFloor)
         {
             requestedFloors.Add(floor);
             
             // If the elevator is idle, start moving
-            if (!isMoving && elevatorStatus == ElevatorStatus.Idle)
+            if (!isMoving)
             {
+                // IMPROVED: Better coroutine management
                 if (moveCoroutine != null)
                 {
                     StopCoroutine(moveCoroutine);
+                    moveCoroutine = null;
                 }
                 
                 moveCoroutine = StartCoroutine(MoveElevator());
+                Debug.Log($"Starting movement coroutine for elevator {gameObject.name}");
             }
             
             Debug.Log($"Floor {floor} requested for elevator {gameObject.name}. Requested floors: {string.Join(", ", requestedFloors)}");
+        }
+        else if (floor == currentFloor && !isMoving)
+        {
+            // We're already at the requested floor, just open the doors
+            Debug.Log($"Elevator {gameObject.name} is already at floor {floor}. Opening doors.");
+            if (doorCoroutine != null)
+            {
+                StopCoroutine(doorCoroutine);
+            }
+            doorCoroutine = StartCoroutine(AnimateDoors(true));
         }
     }
 

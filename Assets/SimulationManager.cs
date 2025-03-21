@@ -80,6 +80,24 @@ public class SimplifiedSimulationManager : MonoBehaviour
     
     private void Update()
     {
+        // Debug update execution less frequently to avoid log spam
+        if (Time.frameCount % 300 == 0) {
+            Debug.Log("Update executing for " + gameObject.name);
+        }
+        
+        // FIXED: Test key now properly finds an elevator to test
+        if (Input.GetKeyDown(KeyCode.T)) {
+            Debug.Log("Test key pressed - forcing elevator move");
+            Elevator[] elevators = FindObjectsOfType<Elevator>();
+            if (elevators.Length > 0) {
+                int randomFloor = elevators[0].CurrentFloor == 0 ? 1 : 0;
+                Debug.Log($"Forcing elevator 0 to move to floor {randomFloor}");
+                elevators[0].RequestFloor(randomFloor);
+            } else {
+                Debug.LogError("No elevators found to test!");
+            }
+        }
+
         // Simple controls for simulation
         if (Input.GetKeyDown(KeyCode.Space))
         {
@@ -102,6 +120,40 @@ public class SimplifiedSimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R))
         {
             RegenerateBuilding();
+        }
+        
+        // NEW: Add F key to force all people to use elevators
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            ForceElevatorUsage();
+        }
+    }
+    
+    // NEW: Force all people to use elevators
+    private void ForceElevatorUsage()
+    {
+        EnhancedPerson[] people = FindObjectsOfType<EnhancedPerson>();
+        Elevator[] elevators = FindObjectsOfType<Elevator>();
+        
+        if (people.Length > 0 && elevators.Length > 0)
+        {
+            Debug.Log($"Forcing {people.Length} people to use elevators");
+            
+            // Make a few random people use elevators
+            int usageCount = Mathf.Min(5, people.Length);
+            for (int i = 0; i < usageCount; i++)
+            {
+                EnhancedPerson person = people[i];
+                int currentFloor = person.currentFloor;
+                int targetFloor = (currentFloor + 1) % (elevators[0].topFloor + 1);
+                
+                Debug.Log($"Forcing person {person.name} to go from floor {currentFloor} to {targetFloor}");
+                person.GoToFloor(targetFloor);
+            }
+        }
+        else
+        {
+            Debug.LogError("No people or elevators found to force usage!");
         }
     }
     
@@ -197,7 +249,8 @@ public class SimplifiedSimulationManager : MonoBehaviour
         }
     }
     
-    // Coroutine to verify simulation setup and debug issues
+    
+    // IMPROVED: Better testing of elevator functionality
     private IEnumerator VerifySimulationSetup()
     {
         // Wait a bit to let everything initialize
@@ -249,12 +302,16 @@ public class SimplifiedSimulationManager : MonoBehaviour
                     person.availableElevators = new List<Elevator>(elevators);
                 }
             }
+            
+            // Force a few people to use elevators as a test
+            yield return new WaitForSeconds(2.0f);
+            ForceElevatorUsage();
         }
         
         debugIssuesLogged = true;
     }
     
-    // Test if elevator is responding to requests
+    // IMPROVED: More thorough elevator testing
     private IEnumerator TestElevator(Elevator elevator)
     {
         // Remember initial floor
@@ -274,27 +331,40 @@ public class SimplifiedSimulationManager : MonoBehaviour
         
         if (!elevator.IsMoving && elevator.CurrentFloor == initialFloor)
         {
-            Debug.LogError($"Elevator {elevator.name} is not responding to move requests. Check implementation.");
+            Debug.LogError($"Elevator {elevator.name} is not responding to move requests. Trying to diagnose...");
             
-            // Attempt to diagnose the issue
-            if (elevator.transform.childCount <= 3) // If only cabin and doors
-            {
-                Debug.Log("No passengers in elevator.");
-            }
+            // More detailed diagnostics
+            Debug.Log($"Elevator position: {elevator.transform.position}");
+            Debug.Log($"Elevator status: {elevator.Status}");
+            Debug.Log($"Elevator doors open: {elevator.DoorsOpen}");
             
-            // Check if the elevator has pending requests
-            if (elevator.RequestedFloorsCount == 0)
-            {
-                Debug.LogError("Elevator has no pending requests. RequestFloor method may have failed.");
-            }
-            else
-            {
-                Debug.Log($"Elevator has {elevator.RequestedFloorsCount} pending requests but isn't moving.");
-            }
+            // Attempt forceful movement
+            Debug.Log("Attempting forceful movement...");
+            StartCoroutine(ForcefulElevatorMovement(elevator, targetFloor));
         }
         else
         {
             Debug.Log($"Elevator {elevator.name} is responding to requests correctly.");
+        }
+    }
+    
+    // NEW: Try more forcefully to make an elevator move
+    private IEnumerator ForcefulElevatorMovement(Elevator elevator, int targetFloor)
+    {
+        // Try requesting the floor multiple times
+        for (int i = 0; i < 3; i++)
+        {
+            Debug.Log($"Forceful attempt {i+1} to move elevator to floor {targetFloor}");
+            elevator.RequestFloor(targetFloor);
+            yield return new WaitForSeconds(1.0f);
+        }
+        
+        // Wait longer to see if it moves
+        yield return new WaitForSeconds(5.0f);
+        
+        if (!elevator.IsMoving)
+        {
+            Debug.LogError("Elevator still not moving after forceful attempts. Possible code issue in Elevator.cs");
         }
     }
 }

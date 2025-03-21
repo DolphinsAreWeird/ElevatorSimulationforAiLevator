@@ -947,10 +947,13 @@ MonoBehaviour:
   numberOfFloors: 7
   floorHeight: 3
   floorSize: {x: 20, y: 20}
-  numberOfElevators: 1
+  numberOfElevators: 2
   elevatorSpacing: 5
   minPeoplePerFloor: 1
   maxPeoplePerFloor: 20
+  wallTransparency: 0.3
+  showWalls: 1
+  wallColor: {r: 0.8, g: 0.8, b: 0.9, a: 1}
 --- !u!4 &914292988
 Transform:
   m_ObjectHideFlags: 0
@@ -1341,7 +1344,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fca17a6d4e44e4226b9c6f11e16250f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  simulationSpeed: 1.5
+  simulationSpeed: 1
   pauseSimulation: 0
   showDebugInfo: 1
   dayLengthInMinutes: 10

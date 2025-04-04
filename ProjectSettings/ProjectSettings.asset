@@ -4,7 +4,7 @@
 PlayerSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 28
-  productGUID: 6a0aa62672488416686e4897749ab571
+  productGUID: 324a4af3168424f50849f7e6b726f202
   AndroidProfiler: 0
   AndroidFilterTouchesWhenObscured: 0
   AndroidEnableSustainedPerformanceMode: 0
@@ -13,7 +13,7 @@ PlayerSettings:
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: DefaultCompany
-  productName: ElevatorSimulation
+  productName: UpdatedElevator
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -837,14 +837,14 @@ PlayerSettings:
   editorAssembliesCompatibilityLevel: 1
   m_RenderingPath: 1
   m_MobileRenderingPath: 1
-  metroPackageName: ElevatorSimulation
+  metroPackageName: UpdatedElevator
   metroPackageVersion: 
   metroCertificatePath: 
   metroCertificatePassword: 
   metroCertificateSubject: 
   metroCertificateIssuer: 
   metroCertificateNotAfter: 0000000000000000
-  metroApplicationDescription: ElevatorSimulation
+  metroApplicationDescription: UpdatedElevator
   wsaImages: {}
   metroTileShortName: 
   metroTileShowName: 0
@@ -915,10 +915,10 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 2
   windowsGamepadBackendHint: 0
-  cloudProjectId: 18c5fff5-a8fd-4b36-9dbc-8d39d44441e0
+  cloudProjectId: c2ec7b4f-80b7-44ea-afa0-2e47e88bf195
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: ElevatorSimulation
+  projectName: UpdatedElevator
   organizationId: kpwai
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0

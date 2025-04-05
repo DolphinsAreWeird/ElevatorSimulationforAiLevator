@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
+[SelectionBase]
 public class EnhancedPerson : MonoBehaviour
 {
     [Header("Person Settings")]
@@ -79,12 +80,13 @@ public class EnhancedPerson : MonoBehaviour
     // Schedule state
     private float nextActionTime;
     private ElevatorController elevatorController;
-    
+
     // Component references
+    [SerializeField]
     private Renderer personRenderer;
-    private Transform originalVisual;
-    private Vector3 originalScale = new Vector3(0.5f, 1f, 0.5f); // Default scale for person
-    
+    [SerializeField]
+    private CapsuleCollider personCollider;
+
     // Time reference
     private SimplifiedSimulationManager simulationManager;
     
@@ -200,39 +202,9 @@ public class EnhancedPerson : MonoBehaviour
     
     private void InitializePerson()
     {
-        // Initialize visual appearance based on person type
-        if (TryGetComponent<Renderer>(out personRenderer))
+        if (personRenderer)
         {
             personRenderer.material.color = GetColorForPersonType();
-        }
-        else
-        {
-            // Create a visual representation
-            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            visual.transform.SetParent(transform);
-            visual.transform.localPosition = Vector3.zero;
-            visual.transform.localScale = originalScale;
-            originalVisual = visual.transform;
-            
-            // Remove the collider from the visual (we'll use the parent's collider)
-            Destroy(visual.GetComponent<Collider>());
-            
-            // Add material with color based on person type
-            Renderer visualRenderer = visual.GetComponent<Renderer>();
-            if (visualRenderer != null)
-            {
-                visualRenderer.material.color = GetColorForPersonType();
-                personRenderer = visualRenderer;
-            }
-        }
-        
-        // Add a capsule collider if missing
-        if (!TryGetComponent<CapsuleCollider>(out _))
-        {
-            CapsuleCollider collider = gameObject.AddComponent<CapsuleCollider>();
-            collider.height = 2f;
-            collider.radius = 0.5f;
-            collider.center = new Vector3(0, 0, 0);
         }
         
         // Find elevator controller if not set
@@ -386,16 +358,6 @@ public class EnhancedPerson : MonoBehaviour
             transform.position = lastPosition;
         }
         
-        // Check if we have a visual child and if its scale is wrong
-        if (originalVisual != null)
-        {
-            if (originalVisual.localScale != originalScale)
-            {
-                Debug.LogWarning($"Person {gameObject.name} visual has incorrect scale. Resetting.");
-                originalVisual.localScale = originalScale;
-            }
-        }
-        
         // Check for extreme velocity which might cause stretching
         float velocity = Vector3.Distance(transform.position, lastPosition) / (Time.time - lastMoveTime);
         if (velocity > maxSpeed * 5 && !possibleStretchDetected)
@@ -405,12 +367,6 @@ public class EnhancedPerson : MonoBehaviour
             
             // Try to fix by resetting position
             transform.position = lastPosition;
-            
-            // Reset child scale
-            if (originalVisual != null)
-            {
-                originalVisual.localScale = originalScale;
-            }
         }
         else if (velocity <= maxSpeed * 2)
         {
@@ -1083,8 +1039,8 @@ public class EnhancedPerson : MonoBehaviour
         Vector3 elevatorPos = currentElevator.transform.position;
         
         // Unparent from elevator
-        transform.parent = null;
-        
+        transform.SetParent(null);
+
         // Move away from elevator - Bangkok style, more varied exit paths
         float exitAngle = Random.Range(0, 360f) * Mathf.Deg2Rad;
         Vector3 exitDir = new Vector3(Mathf.Cos(exitAngle) * Random.Range(1.5f, 3.0f), 0, Mathf.Sin(exitAngle) * Random.Range(1.5f, 3.0f));
@@ -1093,12 +1049,6 @@ public class EnhancedPerson : MonoBehaviour
         
         // Use safe position change to avoid stretching
         transform.position = Vector3.ClampMagnitude(exitPos, positionClamp);
-        
-        // Reset child scale to prevent stretching
-        if (originalVisual != null)
-        {
-            originalVisual.localScale = originalScale;
-        }
         
         currentFloor = targetFloor;
         targetElevator = null;

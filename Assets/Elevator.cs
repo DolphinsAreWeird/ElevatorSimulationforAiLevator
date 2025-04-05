@@ -4,6 +4,29 @@ using System.Collections.Generic;
 
 public class Elevator : MonoBehaviour
 {
+    [SerializeField]
+    private ElevatorDoor door;
+
+    [SerializeField]
+    private List<EnhancedPerson> persons;
+
+    public void SetEvelatorSize(Vector3 size)
+    {
+        door.SetElevatorDoorSize(new Vector2(size.x, size.z));
+    }
+
+    public void AddPerson(EnhancedPerson person)
+    {
+        if (persons.Contains(person))
+            return;
+        persons.Add(person);
+    }
+
+    public bool RemovePerson(EnhancedPerson person)
+    {
+        return persons.Remove(person);
+    }
+
     [Header("Elevator Settings")]
     public float floorHeight = 3f;         // Vertical distance between floors
     public float speed = 2f;               // Speed of elevator movement
@@ -17,7 +40,7 @@ public class Elevator : MonoBehaviour
     public GameObject doorLeft;            // Left door visual
     public GameObject doorRight;           // Right door visual
     public float doorOpenDistance = 0.5f;  // How far doors open
-    
+
     // Elevator state
     private int currentFloor = 0;           // Current floor the elevator is on
     private bool isMoving = false;          // Whether the elevator is currently moving
@@ -29,10 +52,10 @@ public class Elevator : MonoBehaviour
 
     // Status lights and indicators
     private ElevatorStatus elevatorStatus = ElevatorStatus.Idle;
-    
+
     // Debug flag
     private bool isInitialized = false;
-    
+
     // Public properties
     public int CurrentFloor => currentFloor;
     public bool IsMoving => isMoving;
@@ -41,35 +64,50 @@ public class Elevator : MonoBehaviour
     public float RemainingCapacity => maxWeight - currentWeight;
     public int RequestedFloorsCount => requestedFloors.Count;
     public ElevatorStatus Status => elevatorStatus;
-    
+
     void Awake()
     {
         // Fix initial position during awake to ensure it's on top of the floor
         Vector3 position = transform.position;
         position.y = 0.05f; // Slightly above zero to avoid clipping
         transform.position = position;
-        
+
         Debug.Log($"Elevator {gameObject.name} - Initial position set to: {transform.position}");
+
+
+
+
+        List<Floor> exampleFloor = new();
+
+        for (int i = 0; i < exampleFloor.Count; i++)
+        {
+            Debug.Log($"Requested floor: {exampleFloor[i]}");
+        }
+
+        foreach (Floor vector in exampleFloor)
+        {
+            Debug.Log($"Requested floor: {vector}");
+        }
     }
-    
+
     void Start()
     {
         InitializeElevator();
     }
-    
+
     void InitializeElevator()
     {
         if (isInitialized) return;
-        
+
         // Initialize elevator visuals
         if (elevatorCabin == null)
         {
             elevatorCabin = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            elevatorCabin.transform.parent = transform;
             elevatorCabin.transform.localPosition = Vector3.zero;
             elevatorCabin.transform.localScale = new Vector3(1.8f, 2.5f, 1.8f);
+            elevatorCabin.transform.SetParent(transform);
             elevatorCabin.name = "ElevatorCabin";
-            
+
             // Add material to differentiate it
             Renderer renderer = elevatorCabin.GetComponent<Renderer>();
             if (renderer != null)
@@ -81,11 +119,11 @@ public class Elevator : MonoBehaviour
         if (doorLeft == null)
         {
             doorLeft = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            doorLeft.transform.parent = transform;
             doorLeft.transform.localPosition = new Vector3(-0.45f, 0, 0.9f);
             doorLeft.transform.localScale = new Vector3(0.9f, 2.5f, 0.1f);
+            doorLeft.transform.SetParent(transform);
             doorLeft.name = "DoorLeft";
-            
+
             // Add material to differentiate it
             Renderer renderer = doorLeft.GetComponent<Renderer>();
             if (renderer != null)
@@ -97,11 +135,11 @@ public class Elevator : MonoBehaviour
         if (doorRight == null)
         {
             doorRight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            doorRight.transform.parent = transform;
             doorRight.transform.localPosition = new Vector3(0.45f, 0, 0.9f);
             doorRight.transform.localScale = new Vector3(0.9f, 2.5f, 0.1f);
+            doorRight.transform.SetParent(transform);
             doorRight.name = "DoorRight";
-            
+
             // Add material to differentiate it
             Renderer renderer = doorRight.GetComponent<Renderer>();
             if (renderer != null)
@@ -109,7 +147,7 @@ public class Elevator : MonoBehaviour
                 renderer.material.color = new Color(0.5f, 0.5f, 0.7f);
             }
         }
-        
+
         // Log initialization
         Debug.Log($"Elevator {gameObject.name} initialized at floor {currentFloor} and position {transform.position}");
         isInitialized = true;
@@ -119,10 +157,13 @@ public class Elevator : MonoBehaviour
     void Update()
     {
         // Every 5 seconds, check if we have requested floors but aren't moving
-        if (Time.frameCount % 300 == 0) {
-            if (requestedFloors.Count > 0 && !isMoving) {
+        if (Time.frameCount % 300 == 0)
+        {
+            if (requestedFloors.Count > 0 && !isMoving)
+            {
                 Debug.LogWarning($"Elevator {gameObject.name} has {requestedFloors.Count} pending floors but isn't moving. Restarting movement.");
-                if (moveCoroutine != null) {
+                if (moveCoroutine != null)
+                {
                     StopCoroutine(moveCoroutine);
                 }
                 moveCoroutine = StartCoroutine(MoveElevator());
@@ -139,14 +180,14 @@ public class Elevator : MonoBehaviour
             Debug.LogWarning($"Cannot enter elevator {gameObject.name} because doors are closed");
             return false;
         }
-        
+
         // Check weight limit
         if (currentWeight + weight > maxWeight)
         {
             Debug.LogWarning($"Cannot enter elevator {gameObject.name} because it would exceed weight limit");
             return false;
         }
-        
+
         // Count actual passengers (excluding elevator components)
         int passengerCount = 0;
         for (int i = 0; i < transform.childCount; i++)
@@ -157,14 +198,14 @@ public class Elevator : MonoBehaviour
                 passengerCount++;
             }
         }
-        
+
         // Check capacity limit
         if (passengerCount >= capacity)
         {
             Debug.LogWarning($"Cannot enter elevator {gameObject.name} because it is at capacity ({passengerCount}/{capacity})");
             return false;
         }
-        
+
         return true;
     }
 
@@ -176,20 +217,20 @@ public class Elevator : MonoBehaviour
             Debug.LogError("Attempted to add null passenger to elevator!");
             return;
         }
-        
+
         if (CanEnter(70f)) // Assuming average weight for simplicity
         {
             // Store original parent and position for debugging
             Transform originalParent = passenger.transform.parent;
             Vector3 originalPos = passenger.transform.position;
-            
+
             passenger.transform.SetParent(transform);
-            
+
             // Position inside elevator with some random offset
             float offsetX = Random.Range(-0.6f, 0.6f);
             float offsetZ = Random.Range(-0.6f, 0.6f);
             passenger.transform.localPosition = new Vector3(offsetX, 0, offsetZ);
-            
+
             // Update weight
             EnhancedPerson person = passenger.GetComponent<EnhancedPerson>();
             if (person != null)
@@ -200,7 +241,7 @@ public class Elevator : MonoBehaviour
             {
                 currentWeight += 70f; // Default weight
             }
-            
+
             Debug.Log($"Passenger {passenger.name} added to elevator {gameObject.name} at floor {currentFloor}. " +
                      $"Current weight: {currentWeight}kg. Position changed from {originalPos} to {passenger.transform.position}");
         }
@@ -219,15 +260,15 @@ public class Elevator : MonoBehaviour
             Debug.LogWarning($"Invalid floor request: {floor}. Floor must be between 0 and {topFloor}.");
             return;
         }
-        
+
         // IMPROVED: Extra debug info
         Debug.Log($"Elevator {gameObject.name} received request for floor {floor}. Current floor: {currentFloor}, Moving: {isMoving}, Status: {elevatorStatus}");
-        
+
         // Add floor to requested floors if not already there and not current floor
         if (!requestedFloors.Contains(floor) && floor != currentFloor)
         {
             requestedFloors.Add(floor);
-            
+
             // If the elevator is idle, start moving
             if (!isMoving)
             {
@@ -237,11 +278,11 @@ public class Elevator : MonoBehaviour
                     StopCoroutine(moveCoroutine);
                     moveCoroutine = null;
                 }
-                
+
                 moveCoroutine = StartCoroutine(MoveElevator());
                 Debug.Log($"Starting movement coroutine for elevator {gameObject.name}");
             }
-            
+
             Debug.Log($"Floor {floor} requested for elevator {gameObject.name}. Requested floors: {string.Join(", ", requestedFloors)}");
         }
         else if (floor == currentFloor && !isMoving)
@@ -270,27 +311,27 @@ public class Elevator : MonoBehaviour
             Debug.LogWarning($"Elevator {gameObject.name} is already moving. Ignoring move request.");
             yield break;
         }
-        
+
         isMoving = true;
         elevatorStatus = ElevatorStatus.Moving;
-        
+
         Debug.Log($"Elevator {gameObject.name} starting movement to floors: {string.Join(", ", requestedFloors)}");
-        
+
         while (requestedFloors.Count > 0)
         {
             // Sort requests to be more efficient
             SortRequests();
-            
+
             int targetFloor = requestedFloors[0];
             float targetY = targetFloor * floorHeight + 0.05f; // Add small offset to avoid clipping
             Vector3 targetPosition = new Vector3(transform.position.x, targetY, transform.position.z);
-            
+
             // Determine movement direction for status
             if (targetFloor > currentFloor)
                 elevatorStatus = ElevatorStatus.MovingUp;
             else
                 elevatorStatus = ElevatorStatus.MovingDown;
-            
+
             // Close doors before moving if open
             if (doorsOpen)
             {
@@ -298,18 +339,18 @@ public class Elevator : MonoBehaviour
                 {
                     StopCoroutine(doorCoroutine);
                 }
-                
+
                 doorCoroutine = StartCoroutine(AnimateDoors(false));
                 yield return doorCoroutine;
             }
-            
+
             // Move to requested floor
             Debug.Log($"Elevator {gameObject.name} moving from floor {currentFloor} (y={transform.position.y}) to floor {targetFloor} (y={targetY})");
-            
+
             float startTime = Time.time;
             float journeyLength = Mathf.Abs(transform.position.y - targetPosition.y);
             float distanceCovered = 0;
-            
+
             // Only move if we're not already at the target position
             if (journeyLength > 0.01f)
             {
@@ -317,47 +358,47 @@ public class Elevator : MonoBehaviour
                 {
                     float distanceThisFrame = speed * Time.deltaTime;
                     distanceCovered += distanceThisFrame;
-                    
+
                     // Move towards target
                     transform.position = Vector3.MoveTowards(
-                        transform.position, 
-                        targetPosition, 
+                        transform.position,
+                        targetPosition,
                         distanceThisFrame
                     );
-                    
+
                     // Log position every few frames for debugging
                     if (Random.value < 0.05f) // Only log occasionally to avoid spam
                     {
-                        Debug.Log($"Elevator {gameObject.name} moving: current={transform.position.y}, target={targetY}, distance={journeyLength-distanceCovered}");
+                        Debug.Log($"Elevator {gameObject.name} moving: current={transform.position.y}, target={targetY}, distance={journeyLength - distanceCovered}");
                     }
-                    
+
                     yield return null;
                 }
             }
-            
+
             // Snap to exact position
             transform.position = targetPosition;
             currentFloor = targetFloor;
             requestedFloors.RemoveAt(0);
-            
+
             Debug.Log($"Elevator {gameObject.name} arrived at floor {currentFloor}, position: {transform.position}");
-            
+
             // Open doors
             elevatorStatus = ElevatorStatus.Loading;
             if (doorCoroutine != null)
             {
                 StopCoroutine(doorCoroutine);
             }
-            
+
             doorCoroutine = StartCoroutine(AnimateDoors(true));
             yield return doorCoroutine;
-            
+
             // Notify passengers to exit if this is their destination
             NotifyPassengers();
-            
+
             // Wait for loading/unloading
             yield return new WaitForSeconds(doorOpenTime);
-            
+
             // Close doors before moving to next floor
             if (requestedFloors.Count > 0)
             {
@@ -365,12 +406,12 @@ public class Elevator : MonoBehaviour
                 {
                     StopCoroutine(doorCoroutine);
                 }
-                
+
                 doorCoroutine = StartCoroutine(AnimateDoors(false));
                 yield return doorCoroutine;
             }
         }
-        
+
         isMoving = false;
         elevatorStatus = ElevatorStatus.Idle;
         Debug.Log($"Elevator {gameObject.name} completed all requested floors and is now idle.");
@@ -381,13 +422,13 @@ public class Elevator : MonoBehaviour
     {
         // Simple elevator algorithm: continue in current direction until no more requests,
         // then change direction.
-        
+
         // This is a simplified version that just processes floors in the current direction first
         if (requestedFloors.Count <= 1) return;
-        
+
         List<int> upRequests = new List<int>();
         List<int> downRequests = new List<int>();
-        
+
         foreach (int floor in requestedFloors)
         {
             if (floor >= currentFloor)
@@ -395,16 +436,16 @@ public class Elevator : MonoBehaviour
             else
                 downRequests.Add(floor);
         }
-        
+
         // Sort up requests in ascending order
         upRequests.Sort();
-        
+
         // Sort down requests in descending order
         downRequests.Sort((a, b) => b.CompareTo(a));
-        
+
         // Clear and repopulate the list based on current direction
         requestedFloors.Clear();
-        
+
         if (elevatorStatus == ElevatorStatus.MovingUp || elevatorStatus == ElevatorStatus.Idle)
         {
             requestedFloors.AddRange(upRequests);
@@ -422,15 +463,15 @@ public class Elevator : MonoBehaviour
     {
         float duration = 1.0f;
         float elapsedTime = 0f;
-        
+
         // Get initial positions
         Vector3 leftStartPos = doorLeft.transform.localPosition;
         Vector3 rightStartPos = doorRight.transform.localPosition;
-        
+
         // Calculate target positions
         Vector3 leftEndPos = leftStartPos;
         Vector3 rightEndPos = rightStartPos;
-        
+
         if (opening)
         {
             leftEndPos.x = leftStartPos.x - doorOpenDistance;
@@ -441,28 +482,28 @@ public class Elevator : MonoBehaviour
             leftEndPos.x = -0.45f;
             rightEndPos.x = 0.45f;
         }
-        
+
         // Animate
         while (elapsedTime < duration)
         {
             float t = elapsedTime / duration;
-            
+
             // Ease in-out function
             t = t < 0.5f ? 2 * t * t : 1 - Mathf.Pow(-2 * t + 2, 2) / 2;
-            
+
             doorLeft.transform.localPosition = Vector3.Lerp(leftStartPos, leftEndPos, t);
             doorRight.transform.localPosition = Vector3.Lerp(rightStartPos, rightEndPos, t);
-            
+
             elapsedTime += Time.deltaTime;
             yield return null;
         }
-        
+
         // Ensure doors reach final position
         doorLeft.transform.localPosition = leftEndPos;
         doorRight.transform.localPosition = rightEndPos;
-        
+
         doorsOpen = opening;
-        
+
         Debug.Log($"Elevator {gameObject.name} doors are now {(opening ? "open" : "closed")} at floor {currentFloor}");
     }
 
@@ -472,17 +513,17 @@ public class Elevator : MonoBehaviour
         // Debug passenger count
         int passengerCount = 0;
         int exitingCount = 0;
-        
+
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             Transform child = transform.GetChild(i);
-            
+
             // Skip elevator components
             if (child.gameObject == elevatorCabin || child.gameObject == doorLeft || child.gameObject == doorRight)
                 continue;
-            
+
             passengerCount++;
-            
+
             EnhancedPerson person = child.GetComponent<EnhancedPerson>();
             if (person != null && person.targetFloor == currentFloor)
             {
@@ -492,10 +533,10 @@ public class Elevator : MonoBehaviour
                 person.ExitElevator();
             }
         }
-        
+
         Debug.Log($"Elevator {gameObject.name} has {passengerCount} passengers at floor {currentFloor}, {exitingCount} exiting");
     }
-    
+
     public enum ElevatorStatus
     {
         Idle,
@@ -506,7 +547,7 @@ public class Elevator : MonoBehaviour
         Maintenance,
         OutOfService
     }
-    
+
     // For debugging
     void OnDrawGizmos()
     {
@@ -515,11 +556,11 @@ public class Elevator : MonoBehaviour
         Vector3 bottom = new Vector3(transform.position.x, 0, transform.position.z);
         Vector3 top = new Vector3(transform.position.x, topFloor * floorHeight, transform.position.z);
         Gizmos.DrawLine(bottom, top);
-        
+
         // Draw current position
         Gizmos.color = isMoving ? Color.red : Color.green;
         Gizmos.DrawWireCube(transform.position, new Vector3(1.8f, 2.5f, 1.8f));
-        
+
         // Mark floors along the path
         for (int i = 0; i <= topFloor; i++)
         {
@@ -528,4 +569,18 @@ public class Elevator : MonoBehaviour
             Gizmos.DrawWireSphere(new Vector3(transform.position.x, y, transform.position.z), 0.2f);
         }
     }
+
+    // TODO: Example of using enumuration.
+    /*
+    public IEnumerable<EnhancedPerson> GetPersonBelowWeight(float weight)
+    {
+        foreach (var person in persons)
+        {
+            if (person.weight < weight)
+            {
+                yield return person;
+            }
+        }
+    }
+    */
 }

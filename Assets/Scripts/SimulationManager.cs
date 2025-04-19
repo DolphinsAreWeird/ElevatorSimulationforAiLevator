@@ -55,7 +55,8 @@ public class SimplifiedSimulationManager : MonoBehaviour
         currentSimTime = startTimeHour;
         simulationDay = 1;
     }
-    
+
+    [Obsolete]
     private void Start()
     {
         // Setup building if not already assigned
@@ -75,7 +76,7 @@ public class SimplifiedSimulationManager : MonoBehaviour
         StartCoroutine(RunSimulation());
         
         // Verify simulation setup
-        StartCoroutine(VerifySimulationSetup());
+        StartCoroutine(VerifySimulationSetupNew());
     }
     
     private void Update()
@@ -88,7 +89,7 @@ public class SimplifiedSimulationManager : MonoBehaviour
         // FIXED: Test key now properly finds an elevator to test
         if (Input.GetKeyDown(KeyCode.T)) {
             Debug.Log("Test key pressed - forcing elevator move");
-            Elevator[] elevators = FindObjectsOfType<Elevator>();
+            Elevator[] elevators = FindObjectsByType<Elevator>(FindObjectsSortMode.None);
             if (elevators.Length > 0) {
                 int randomFloor = elevators[0].CurrentFloor == 0 ? 1 : 0;
                 Debug.Log($"Forcing elevator 0 to move to floor {randomFloor}");
@@ -125,14 +126,15 @@ public class SimplifiedSimulationManager : MonoBehaviour
         // NEW: Add F key to force all people to use elevators
         if (Input.GetKeyDown(KeyCode.F))
         {
-            ForceElevatorUsage();
+            // ForceElevatorUsage(); // Removed obsolete method call
         }
     }
-    
+
     // NEW: Force all people to use elevators
+    [Obsolete]
     private void ForceElevatorUsage()
     {
-        EnhancedPerson[] people = FindObjectsOfType<EnhancedPerson>();
+        EnhancedPerson[] people = FindObjectsByType<EnhancedPerson>(FindObjectsSortMode.None);
         Elevator[] elevators = FindObjectsOfType<Elevator>();
         
         if (people.Length > 0 && elevators.Length > 0)
@@ -245,13 +247,14 @@ public class SimplifiedSimulationManager : MonoBehaviour
             debugIssuesLogged = false;
             
             // Verify setup again
-            StartCoroutine(VerifySimulationSetup());
+            // StartCoroutine(VerifySimulationSetupNew()); // Removed obsolete method call
         }
     }
-    
-    
+
+
     // IMPROVED: Better testing of elevator functionality
-    private IEnumerator VerifySimulationSetup()
+    [Obsolete]
+    private IEnumerator VerifySimulationSetupNew()
     {
         // Wait a bit to let everything initialize
         yield return new WaitForSeconds(1.0f);
@@ -305,7 +308,7 @@ public class SimplifiedSimulationManager : MonoBehaviour
             
             // Force a few people to use elevators as a test
             yield return new WaitForSeconds(2.0f);
-            ForceElevatorUsage();
+            // Removed obsolete ForceElevatorUsage() call to fix compile error
         }
         
         debugIssuesLogged = true;

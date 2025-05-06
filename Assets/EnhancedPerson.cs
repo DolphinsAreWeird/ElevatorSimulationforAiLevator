@@ -1,12 +1,10 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine.AI;
 
 [SelectionBase]
 public class EnhancedPerson : MonoBehaviour
 {
-    private NavMeshAgent navAgent;
     [Header("Person Settings")]
     public int currentFloor = 0;   // Current floor
     public int homeFloor = 0;      // Home/base floor
@@ -97,9 +95,8 @@ public class EnhancedPerson : MonoBehaviour
     private float lastMoveTime;
     private Vector3 lastPosition;
     private bool possibleStretchDetected = false;
-
+    
     // Start is called before the first frame update
-    [System.Obsolete]
     void Start()
     {
         // Initialize random traits based on person type
@@ -121,16 +118,6 @@ public class EnhancedPerson : MonoBehaviour
         lastMoveTime = Time.time;
         
         InitializePerson();
-
-        navAgent = GetComponent<NavMeshAgent>() 
-             ?? gameObject.AddComponent<NavMeshAgent>();
-
-        // Match the agent to your person’s settings
-        navAgent.speed            = moveSpeed;
-        navAgent.angularSpeed     = 120f;
-        navAgent.acceleration     = moveSpeed * 2f;
-        navAgent.stoppingDistance = 0.5f;
-        navAgent.baseOffset       = 1f;    // height of their “feet”
     }
     
     private void InitializePersonType()
@@ -212,8 +199,7 @@ public class EnhancedPerson : MonoBehaviour
             moveSpeed = Mathf.Min(moveSpeed, maxSpeed);
         }
     }
-
-    [System.Obsolete]
+    
     private void InitializePerson()
     {
         if (personRenderer)
@@ -264,98 +250,99 @@ public class EnhancedPerson : MonoBehaviour
     }
     
     // Update is called once per frame
-    // Inside EnhancedPerson.cs Update()
-
     void Update()
     {
-        if (navAgent == null || !navAgent.isOnNavMesh) {
-            // Safety check if agent is somehow disabled or off mesh
-            if(Time.frameCount % 60 == 0) Debug.LogError($"{gameObject.name} NavAgent issue!");
-            return;
-        }
-
-        switch (currentState)
+        // Check if there's any stretched capsule issue
+        CheckForVisualIssues();
+        
+        // Check if it's time for next action
+        if (Time.time >= nextActionTime && !waitingForElevator && !isMovingToDestination)
         {
-            case PersonState.Idle:
-                if (Time.time >= nextActionTime) {
-                    DecideNextAction();
+            DecideNextAction();
+        }
+        
+        // Handle movement if we have a target
+        if (hasTarget)
+        {
+            MoveTowardsTarget();
+        }
+        
+        // Check if we need to request an elevator
+        if (waitingForElevator && targetElevator == null)
+        {
+            RequestElevator();
+        }
+        
+        // Check if our target elevator has arrived
+        if (waitingForElevator && targetElevator != null)
+        {
+            if (targetElevator.CurrentFloor == currentFloor && targetElevator.DoorsOpen)
+            {
+                // Check distance
+                float distance = Vector3.Distance(transform.position, targetElevator.transform.position);
+                if (distance <= elevatorCheckDistance)
+                {
+                    EnterElevator();
                 }
-                break;
-
-            case PersonState.MovingToWaitSpot:
-                if (!navAgent.pathPending && navAgent.remainingDistance <= navAgent.stoppingDistance) {
-                    Debug.Log($"{gameObject.name} arrived at elevator wait spot for {targetElevator?.name}.");
-                    navAgent.isStopped = true; // Stop moving for now
-                    currentState = PersonState.WaitingAtSpot;
+                else
+                {
+                    // If we're not close enough, move towards the elevator
+                    moveTarget = targetElevator.transform.position;
+                    hasTarget = true;
                 }
-                break;
-
-            case PersonState.WaitingAtSpot:
-                if (targetElevator == null) { // Safety check
-                    Debug.LogWarning($"{gameObject.name} lost target elevator while waiting. Resetting.");
-                    currentState = PersonState.Idle;
-                    ScheduleNextAction();
-                    break;
-                }
-
-                // Check if elevator is ready
-                if (targetElevator.CurrentFloor == currentFloor && targetElevator.DoorsOpen) {
-                    Debug.Log($"{gameObject.name} sees elevator {targetElevator.name} is ready. Moving to board.");
-                    // Calculate boarding position (slightly inside)
-                    Vector3 boardPosition = targetElevator.transform.position + targetElevator.transform.forward * 0.2f; // Adjust offset
-                    boardPosition.y = currentFloor * floorHeight + navAgent.baseOffset;
-
-                    currentNavTarget = boardPosition;
-                    navAgent.SetDestination(currentNavTarget);
-                    navAgent.isStopped = false; // Start moving again
-                    currentState = PersonState.MovingToBoard;
-                } else {
-                    // Check patience
+            }
+            else
+            {
+                // Check for stuck waiting conditions
+                if (Time.frameCount % 300 == 0 && targetElevator != null) {
+                    float distance = Vector3.Distance(transform.position, targetElevator.transform.position);
+                    Debug.Log($"Person {gameObject.name} waiting for elevator. Elevator floor: {targetElevator.CurrentFloor}, Person floor: {currentFloor}, Distance: {distance}, Doors open: {targetElevator.DoorsOpen}");
+                    
+                    // If elevator hasn't arrived after a while, re-request it
+                    if (!targetElevator.IsMoving && targetElevator.CurrentFloor != currentFloor) {
+                        Debug.Log($"Re-requesting elevator to come to floor {currentFloor}");
+                        targetElevator.CallToFloor(currentFloor);
+                    }
+                    
+                    // Check if we've been waiting too long based on patience
                     float waitTime = Time.time - elevatorWaitStartTime;
                     float adjustedMaxWaitTime = maxWaitTimeForElevator * patienceLevel;
-                    if (waitTime > adjustedMaxWaitTime) {
-                        Debug.Log($"{gameObject.name} got tired of waiting for {targetElevator.name}. Taking stairs.");
-                        targetElevator = null; // Give up on this elevator
-                        SimulateTakingStairs(targetFloor); // Switch to stairs
+                    
+                    if (waitTime > adjustedMaxWaitTime)
+                    {
+                        Debug.Log($"Person {gameObject.name} got tired of waiting and is taking stairs");
+                        waitingForElevator = false;
+                        SimulateTakingStairs(targetFloor);
+                        targetElevator = null;
                     }
                 }
-                break;
-
-            case PersonState.MovingToBoard:
-                if (targetElevator == null) { // Safety check
-                    Debug.LogWarning($"{gameObject.name} lost target elevator while boarding. Resetting.");
-                    currentState = PersonState.Idle;
-                    ScheduleNextAction();
-                    break;
-                }
-                // Use a slightly larger threshold for entry detection
-                if (!navAgent.pathPending && navAgent.remainingDistance <= navAgent.stoppingDistance + 0.3f) {
-                    EnterElevatorActual(); // Commit to entering
-                }
-                // Add a timeout here too? If stuck moving to board for too long.
-                break;
-
-            case PersonState.MovingToDestination: // Moving after exiting elevator/stairs
-                if (!navAgent.pathPending && navAgent.remainingDistance <= navAgent.stoppingDistance) {
-                    Debug.Log($"{gameObject.name} arrived at final destination on floor {currentFloor}.");
-                    currentState = PersonState.Idle;
-                    ScheduleNextAction();
-                }
-                break;
-
-            case PersonState.InElevator:
-                // Do nothing, controlled by elevator
-                break;
-
-            case PersonState.TakingStairs:
-                // Handled by coroutine
-                break;
+            }
         }
-
-        // Optional: Smooth rotation towards velocity
-        if (navAgent.velocity.sqrMagnitude > 0.1f && currentState != PersonState.InElevator) {
-            Quaternion lookRotation = Quaternion.LookRotation(navAgent.velocity.normalized);
-            transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 10f);
+        
+        // Update rush status occasionally based on time
+        if (Time.frameCount % 1000 == 0 && simulationManager != null)
+        {
+            UpdateRushStatus();
+        }
+        
+        // Group behavior - if we're a follower, adjust targets based on leader
+        if (isInGroup && groupLeader != null && Random.value < 0.1f)
+        {
+            float distanceToLeader = Vector3.Distance(transform.position, groupLeader.transform.position);
+            if (distanceToLeader > 3f)
+            {
+                // Follow leader
+                moveTarget = groupLeader.transform.position - (groupLeader.transform.position - transform.position).normalized;
+                hasTarget = true;
+                isMovingToDestination = true;
+            }
+        }
+        
+        // Store position periodically for stretch detection
+        if (Time.time - lastMoveTime > 0.5f)
+        {
+            lastPosition = transform.position;
+            lastMoveTime = Time.time;
         }
     }
     
@@ -507,7 +494,6 @@ public class EnhancedPerson : MonoBehaviour
     
     // Following order flag and related data
     private bool isFollowingOrder = false;
-    private bool isBoardingElevator = false;
     private Vector3 followPosition;
     private int followFloor;
     private bool followUseElevator;
@@ -825,232 +811,112 @@ public class EnhancedPerson : MonoBehaviour
     }
     
     // Coroutine to handle stairs transition with a delay
-    // Inside EnhancedPerson.cs
-
     private IEnumerator StairsTransition(int targetFloor, float travelTime)
     {
-        // Ensure agent is enabled before starting
-        if (!navAgent.enabled) {
-            Debug.LogWarning($"{gameObject.name} agent was disabled at start of StairsTransition. Re-enabling.");
-            navAgent.enabled = true;
-        }
-        if (!navAgent.isOnNavMesh) {
-            // If somehow starting off-mesh, try to recover or abandon
-            Vector3 currentPos = transform.position;
-            if (NavMesh.SamplePosition(currentPos, out NavMeshHit hit, 1.0f, NavMesh.AllAreas)) {
-                navAgent.Warp(hit.position);
-                Debug.LogWarning($"{gameObject.name} was off-mesh at stairs start, warped to nearest point.");
-            } else {
-                Debug.LogError($"{gameObject.name} cannot start StairsTransition, not on NavMesh and no nearby point found at {currentPos}. Aborting stairs.");
-                currentState = PersonState.Idle; // Reset state
-                ScheduleNextAction();
-                yield break; // Exit coroutine
-            }
-        }
-
-
-        currentState = PersonState.TakingStairs; // Use the state machine
-
-        // --- Move to Stairs Entry ---
+        isMovingToDestination = true;
+        
+        // First move to a position that would represent stairs
         float halfWidth = buildingSize.x / 2;
-        // Ensure stairs position Y is correct for the *current* floor + agent offset
-        Vector3 stairsPosition = new Vector3(-halfWidth + 1.5f, currentFloor * floorHeight + navAgent.baseOffset, -buildingSize.y / 4);
-
-        currentNavTarget = stairsPosition;
-        navAgent.SetDestination(currentNavTarget);
-        navAgent.isStopped = false;
-
-        float timeSpentMovingToStairs = 0f;
-        float maxTimeToReachStairs = 10f; // Timeout
-
-        // Wait until we reach the stairs position using agent properties
-        while (navAgent.pathPending || (navAgent.remainingDistance > navAgent.stoppingDistance && timeSpentMovingToStairs < maxTimeToReachStairs))
+        Vector3 stairsPosition = new Vector3(-halfWidth + 1.5f, currentFloor * floorHeight + 1f, -buildingSize.y/4);
+        
+        moveTarget = stairsPosition;
+        hasTarget = true;
+        
+        // Wait until we reach the stairs position
+        float timeout = 0;
+        while (Vector2.Distance(
+            new Vector2(transform.position.x, transform.position.z), 
+            new Vector2(moveTarget.x, moveTarget.z)) > targetReachedThreshold && timeout < 10f)
         {
-            timeSpentMovingToStairs += Time.deltaTime;
+            timeout += Time.deltaTime;
             yield return null;
         }
-
-        if (timeSpentMovingToStairs >= maxTimeToReachStairs) {
-            Debug.LogWarning($"{gameObject.name} timed out moving to stairs entry. Aborting stairs.");
-            currentState = PersonState.Idle;
-            ScheduleNextAction();
-            yield break;
-        }
-
-        navAgent.isStopped = true; // Stop agent before simulating stairs travel
-        navAgent.ResetPath(); // Clear any remaining path
-
-        // --- Simulate Travel Time ---
-        Debug.Log($"{gameObject.name} reached stairs entry, simulating travel for {travelTime}s.");
+        
+        // Now simulate going up/down stairs
         yield return new WaitForSeconds(travelTime);
-
-        // --- Move to New Floor using Warp ---
-        Vector3 stairsExitPosition = new Vector3( // Use the same X,Z as entry
-            stairsPosition.x,
-            targetFloor * floorHeight + navAgent.baseOffset, // Set Y for target floor + agent offset
-            stairsPosition.z
+        
+        // Move to new floor
+        Vector3 newPosition = new Vector3(
+            -halfWidth + 1.5f, 
+            targetFloor * floorHeight + 1f, 
+            -buildingSize.y/4
         );
-
-        // Ensure agent is still enabled before Warp (should be, but good check)
-        if (!navAgent.enabled) navAgent.enabled = true;
-
-        Debug.Log($"{gameObject.name} warping to floor {targetFloor} at {stairsExitPosition}");
-        bool warped = navAgent.Warp(stairsExitPosition);
-
-        if (!warped)
-        {
-            Debug.LogError($"{gameObject.name} failed to Warp to {stairsExitPosition} on floor {targetFloor}! Trying SamplePosition fallback.");
-            // Fallback: Try to find the nearest valid point
-            if (NavMesh.SamplePosition(stairsExitPosition, out NavMeshHit hit, 2.0f, NavMesh.AllAreas)) {
-                Debug.LogWarning($"{gameObject.name} Warp failed, but found nearby NavMesh point at {hit.position}. Warping there instead.");
-                warped = navAgent.Warp(hit.position);
-                if (!warped) {
-                    Debug.LogError($"{gameObject.name} fallback Warp also failed at {hit.position}. Aborting stairs movement.");
-                    currentState = PersonState.Idle;
-                    ScheduleNextAction();
-                    yield break;
-                }
-                stairsExitPosition = hit.position; // Update position if fallback warp worked
-            } else {
-                Debug.LogError($"{gameObject.name} Warp failed and could not find nearby NavMesh point near {stairsExitPosition}. Aborting stairs movement.");
-                currentState = PersonState.Idle;
-                ScheduleNextAction();
-                yield break;
-            }
-        }
-
-        // --- Update State and Move Randomly ---
-        currentFloor = targetFloor; // Update floor *after* successful warp
-        transform.position = stairsExitPosition; // Ensure visual transform matches warp position
-        transform.rotation = Quaternion.identity; // Or face a default direction
-
-        Debug.Log($"{gameObject.name} successfully arrived via stairs on floor {currentFloor}. Moving to random spot.");
-        currentState = PersonState.MovingToDestination; // Set state *before* calling move
-        MoveToRandomSpot(); // Now SetDestination should work
+        
+        // Use safe position change to avoid stretching
+        transform.position = Vector3.ClampMagnitude(newPosition, positionClamp);
+        
+        // Update floor
+        currentFloor = targetFloor;
+        
+        // Finally, move to a random position on the new floor
+        hasTarget = false;
+        isMovingToDestination = false;
+        isFollowingOrder = false; // Clear any following order
+        MoveToRandomSpot();
     }
     
     // Go to a specific floor using elevator
-    // Inside EnhancedPerson.cs
-
-    private enum PersonState { Idle, MovingToWaitSpot, WaitingAtSpot, MovingToBoard, InElevator, MovingToDestination, TakingStairs }
-    private PersonState currentState = PersonState.Idle;
-    private Vector3 currentNavTarget;
-
     public void GoToFloor(int floor)
     {
-        if (currentState == PersonState.InElevator || currentState == PersonState.TakingStairs) return; // Already committed
-
         if (floor == currentFloor)
         {
-            Debug.LogWarning($"{gameObject.name} already on floor {floor}.");
+            Debug.LogWarning($"Person {gameObject.name} attempted to go to the same floor they're already on ({floor})");
             return;
         }
-
-        targetFloor = floor; // Store the final destination floor
-
-        // --- Find Elevator ---
-        if (elevatorController != null) {
+        
+        targetFloor = floor;
+        
+        // Find elevator to use
+        if (elevatorController != null)
+        {
+            // Use the elevator controller to find the best elevator
             targetElevator = elevatorController.FindBestElevatorForRequest(currentFloor, targetFloor);
-        } else if (availableElevators.Count > 0) {
-            // Fallback: find closest (ensure elevators are assigned!)
-            float closestDist = float.MaxValue;
-            foreach (var elev in availableElevators) {
-                if (elev == null) continue;
-                float dist = Vector3.Distance(transform.position, elev.transform.position);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    targetElevator = elev;
+        }
+        else if (availableElevators.Count > 0)
+        {
+            // Find closest elevator
+            float closest = float.MaxValue;
+            foreach (Elevator elevator in availableElevators)
+            {
+                if (elevator == null) continue;
+                
+                float distance = Vector3.Distance(transform.position, elevator.transform.position);
+                if (distance < closest)
+                {
+                    closest = distance;
+                    targetElevator = elevator;
                 }
             }
         }
-
+        
         if (targetElevator != null)
         {
-            // --- Calculate Wait Position ---
-            // Get elevator position projected onto the current floor plane
-            Vector3 elevatorFloorPos = targetElevator.transform.position;
-            elevatorFloorPos.y = currentFloor * floorHeight;
-
-            // Position slightly in front of the elevator (adjust offset as needed)
-            // Assuming elevator faces +Z locally, but it's better to use its actual forward
-            Vector3 waitOffset = targetElevator.transform.forward * -1.5f; // Stand 1.5 units IN FRONT
-            Vector3 waitPosition = elevatorFloorPos + waitOffset;
-            waitPosition.y = currentFloor * floorHeight + navAgent.baseOffset; // Y pos on floor + agent height
-
-
-            // --- Set State and Move ---
-            Debug.Log($"{gameObject.name} decided to use elevator {targetElevator.name} for floor {targetFloor}. Moving to wait spot: {waitPosition}");
-            currentNavTarget = waitPosition;
-            navAgent.SetDestination(currentNavTarget);
-            navAgent.isStopped = false; // Ensure agent is moving
-            currentState = PersonState.MovingToWaitSpot;
-            elevatorWaitStartTime = Time.time; // For patience check
-
-            // --- Call Elevator ---
+            // Set target position near the elevator
+            // Bangkok style - slight crowd forming around elevators
+            Vector3 elevatorWaitPosition = targetElevator.transform.position +
+                new Vector3(Random.Range(0.8f, 1.5f), 0, Random.Range(-1.0f, 1.0f));
+            
+            moveTarget = new Vector3(
+                elevatorWaitPosition.x, 
+                currentFloor * floorHeight + 1f, // Add 1 to be above floor
+                elevatorWaitPosition.z
+            );
+            
+            hasTarget = true;
+            isMovingToDestination = true;
+            waitingForElevator = true;
+            elevatorWaitStartTime = Time.time;
+            
+            // Request the elevator to come to our floor
             targetElevator.CallToFloor(currentFloor);
+            Debug.Log($"Person {gameObject.name} called elevator {targetElevator.name} to floor {currentFloor}");
         }
         else
         {
-            Debug.LogWarning($"{gameObject.name} couldn't find an elevator for floor {targetFloor}. Taking stairs.");
-            SimulateTakingStairs(targetFloor); // Fallback
+            Debug.LogWarning($"Person {gameObject.name} couldn't find an elevator!");
+            ScheduleNextAction(); // Try again later
         }
     }
-
-    // Inside EnhancedPerson.cs
-
-    private void EnterElevatorActual()
-    {
-        if (targetElevator == null) {
-            Debug.LogError($"{gameObject.name} tried to enter null elevator!");
-            currentState = PersonState.Idle; // Reset state
-            ScheduleNextAction();
-            return;
-        }
-
-        Debug.Log($"{gameObject.name} trying to physically enter {targetElevator.name}");
-
-        if (targetElevator.CanEnter(weight))
-        {
-            // --- Disable Agent & Parent ---
-            navAgent.enabled = false; // Disable agent BEFORE parenting
-            transform.SetParent(targetElevator.transform);
-
-            // --- Set Position Inside ---
-            float offsetX = Random.Range(-0.5f, 0.5f); // Adjust bounds based on elevator size
-            float offsetZ = Random.Range(-0.5f, 0.5f);
-            transform.localPosition = new Vector3(offsetX, navAgent.baseOffset, offsetZ); // Use baseOffset for Y
-            transform.localRotation = Quaternion.identity; // Align with elevator
-
-            // --- Update Elevator & State ---
-            targetElevator.AddPerson(this); // Let elevator know (for weight, maybe lists)
-            targetElevator.RequestFloor(targetFloor); // Ensure elevator knows destination
-
-            currentState = PersonState.InElevator;
-            Debug.Log($"{gameObject.name} successfully entered {targetElevator.name}. State: {currentState}");
-        }
-        else
-        {
-            Debug.LogWarning($"{gameObject.name} could not enter {targetElevator.name} (Full/Closed?). Will wait again.");
-            // Go back to waiting state, maybe try again shortly
-            navAgent.isStopped = true; // Stop moving near the door
-            currentState = PersonState.WaitingAtSpot;
-            // Optional: Add a small delay before checking again, or try another elevator
-            StartCoroutine(WaitAndRetryBoarding(1.0f));
-        }
-    }
-
-    private IEnumerator WaitAndRetryBoarding(float delay) {
-        yield return new WaitForSeconds(delay);
-        // If still waiting, the Update loop will try again when elevator is ready
-        if (currentState == PersonState.WaitingAtSpot) {
-            Debug.Log($"{gameObject.name} retrying boarding check.");
-        }
-    }
-
-    // Rename the original AddPerson in Elevator to something like RegisterPersonWeight
-    // if it's only used for tracking, or remove if AddPassenger handles parenting.
-    // Let's assume Elevator.AddPassenger now only does weight/list management
-    // and AddPerson in EnhancedPerson does the parenting/agent disabling.
     
     // Request an elevator
     private void RequestElevator()
@@ -1104,22 +970,7 @@ public class EnhancedPerson : MonoBehaviour
         // Check if we can enter
         if (targetElevator.CanEnter(weight))
         {
-            // Define an offset for the elevator door entry position
-            float entryOffsetZ = 1.0f; // Adjust this value as needed for your elevator's door position
-
-            // Step 1: NavMeshAgent guides the person to the elevator door
-            // 1) Set a flag that we’re in boarding mode
-            isBoardingElevator = true;
-
-            // 2) Compute the target position at the elevator door
-            Vector3 doorEntryPos = targetElevator.transform.position 
-                                + new Vector3(0, 0, entryOffsetZ);
-
-            // 3) Ask the agent to walk there
-            navAgent.SetDestination(doorEntryPos);
-
-            // Step 2: Once the agent arrives (inside OnAgentArrived callback or by checking remainingDistance),
-            // call AddPassenger to parent them and let the elevator carry them between floors.
+            targetElevator.AddPassenger(gameObject);
             targetElevator.RequestFloor(targetFloor);
             
             waitingForElevator = false;
@@ -1174,226 +1025,241 @@ public class EnhancedPerson : MonoBehaviour
     }
     
     // Exit the elevator
-    // Inside EnhancedPerson.cs
-
-    public void ExitElevator(Transform elevatorTransform) // Pass elevator transform for reference
+    public void ExitElevator()
     {
-        if (currentState != PersonState.InElevator) {
-            Debug.LogWarning($"{gameObject.name} received ExitElevator command but not in elevator state ({currentState})!");
+        if (transform.parent == null || transform.parent.GetComponent<Elevator>() == null)
+        {
+            Debug.LogWarning($"Person {gameObject.name} tried to exit elevator but isn't in one!");
             return;
         }
+        
+        Elevator currentElevator = transform.parent.GetComponent<Elevator>();
+        
+        // Remember elevator position before unparenting
+        Vector3 elevatorPos = currentElevator.transform.position;
+        
+        // Unparent from elevator
+        transform.SetParent(null);
 
-        Debug.Log($"{gameObject.name} received command to exit elevator at floor {targetFloor}");
-
-        // --- Store Info & Unparent ---
-        int exitFloor = targetFloor; // This should match elevator's current floor
-        Vector3 elevatorPos = elevatorTransform.position;
-        transform.SetParent(null); // Unparent first
-
-        // --- Re-enable Agent ---
-        navAgent.enabled = true;
-
-        // --- Calculate Exit Position & Warp Agent ---
-        Vector3 exitOffset = elevatorTransform.forward * -2.0f + elevatorTransform.right * Random.Range(-1f, 1f); // Exit 2 units in front, slight L/R variation
-        Vector3 exitPosition = elevatorPos + exitOffset;
-        exitPosition.y = exitFloor * floorHeight + navAgent.baseOffset;
-
-        if (navAgent.Warp(exitPosition)) {
-            Debug.Log($"{gameObject.name} warped to exit position {exitPosition}");
-        } else {
-            Debug.LogError($"{gameObject.name} NavMeshAgent Warp failed! Setting position manually.");
-            transform.position = exitPosition; // Fallback
-        }
-        transform.rotation = Quaternion.LookRotation(-elevatorTransform.forward); // Face away from elevator
-
-
-        // --- Update State & Move ---
-        currentFloor = exitFloor;
-        targetElevator = null; // Clear target
-        currentState = PersonState.MovingToDestination;
-
-        // Immediately decide where to go next on this floor
-        MoveToRandomSpot(); // Sets NavMesh destination and ensures agent isn't stopped
-
-        Debug.Log($"{gameObject.name} exited elevator onto floor {currentFloor}. Moving to {currentNavTarget}. State: {currentState}");
+        // Move away from elevator - Bangkok style, more varied exit paths
+        float exitAngle = Random.Range(0, 360f) * Mathf.Deg2Rad;
+        Vector3 exitDir = new Vector3(Mathf.Cos(exitAngle) * Random.Range(1.5f, 3.0f), 0, Mathf.Sin(exitAngle) * Random.Range(1.5f, 3.0f));
+        Vector3 exitPos = elevatorPos + exitDir;
+        exitPos.y = targetFloor * floorHeight + 1f; // Make sure y position is correct
+        
+        // Use safe position change to avoid stretching
+        transform.position = Vector3.ClampMagnitude(exitPos, positionClamp);
+        
+        currentFloor = targetFloor;
+        targetElevator = null;
+        isFollowingOrder = false; // Clear any following order
+        
+        Debug.Log($"Person {gameObject.name} exited at floor {currentFloor}");
+        
+        // Schedule next action after a brief delay
+        nextActionTime = Time.time + Random.Range(2f, 5f);
     }
     
     // Move to a random position on the current floor with Bangkok-style positioning
-// Inside EnhancedPerson.cs
-
     private void MoveToRandomSpot()
     {
-        // --- Safety Check: Ensure Agent is Active and On NavMesh ---
-        if (!navAgent.enabled || !navAgent.isOnNavMesh)
-        {
-            Debug.LogError($"{gameObject.name} trying to MoveToRandomSpot but agent is not enabled or not on NavMesh! Enabled: {navAgent.enabled}, IsOnNavMesh: {navAgent.isOnNavMesh}, Current State: {currentState}");
-
-            // Attempt recovery if possible
-            if (!navAgent.enabled) navAgent.enabled = true;
-
-            if (!navAgent.isOnNavMesh) {
-                if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 2.0f, NavMesh.AllAreas)) {
-                    Debug.LogWarning($"{gameObject.name} was off-mesh before MoveToRandomSpot. Warping to {hit.position}.");
-                    navAgent.Warp(hit.position);
-                } else {
-                    Debug.LogError($"{gameObject.name} cannot MoveToRandomSpot, off-mesh and no nearby point found. Resetting to Idle.");
-                    currentState = PersonState.Idle;
-                    ScheduleNextAction();
-                    return; // Can't set destination
-                }
-            }
-        }
-        // If recovery warp happened, isOnNavMesh might be true now, so proceed
-
-
-        // --- Calculate Target ---
-        float halfWidth = buildingSize.x / 2 - 1f; // Slightly smaller margin
-        float halfDepth = buildingSize.y / 2 - 1f;
+        float halfWidth = buildingSize.x / 2 - 2f; // Keep away from walls
+        float halfDepth = buildingSize.y / 2 - 2f;
+        
         Vector3 randomPos;
-
-        // Simplified random position for now, ensure Y is correct
-        randomPos = new Vector3(
-            Random.Range(-halfWidth, halfWidth),
-            currentFloor * floorHeight + navAgent.baseOffset, // Use agent's base offset for Y
-            Random.Range(-halfDepth, halfDepth)
-        );
-
-
-        // --- Validate Target Position (Optional but Recommended) ---
-        if (NavMesh.SamplePosition(randomPos, out NavMeshHit closestHit, 1.0f, NavMesh.AllAreas))
+        
+        // Bangkok style - some person types have preferred areas
+        switch (personType)
         {
-            currentNavTarget = closestHit.position; // Use the validated position on the NavMesh
+            case PersonType.OfficeWorker:
+                // Office workers tend to cluster in groups
+                randomPos = new Vector3(
+                    Random.Range(-halfWidth * 0.8f, halfWidth * 0.8f), // More central
+                    currentFloor * floorHeight + 1f,
+                    Random.Range(-halfDepth * 0.8f, halfDepth * 0.8f)
+                );
+                break;
+                
+            case PersonType.Tourist:
+                // Tourists go to the edges and windows
+                if (Random.value < 0.7f)
+                {
+                    // Near windows/edges
+                    float edge = Random.value < 0.5f ? 1 : -1;
+                    if (Random.value < 0.5f)
+                    {
+                        // Along X edge
+                        randomPos = new Vector3(
+                            edge * halfWidth * 0.8f,
+                            currentFloor * floorHeight + 1f,
+                            Random.Range(-halfDepth * 0.8f, halfDepth * 0.8f)
+                        );
+                    }
+                    else
+                    {
+                        // Along Z edge
+                        randomPos = new Vector3(
+                            Random.Range(-halfWidth * 0.8f, halfWidth * 0.8f),
+                            currentFloor * floorHeight + 1f,
+                            edge * halfDepth * 0.8f
+                        );
+                    }
+                }
+                else
+                {
+                    // Random position
+                    randomPos = new Vector3(
+                        Random.Range(-halfWidth, halfWidth),
+                        currentFloor * floorHeight + 1f,
+                        Random.Range(-halfDepth, halfDepth)
+                    );
+                }
+                break;
+                
+            case PersonType.Maintenance:
+                // Maintenance people check corners and edges
+                if (Random.value < 0.6f)
+                {
+                    // Near corners or edges
+                    float edgeX = Random.value < 0.5f ? 0.8f : -0.8f;
+                    float edgeZ = Random.value < 0.5f ? 0.8f : -0.8f;
+                    randomPos = new Vector3(
+                        edgeX * halfWidth,
+                        currentFloor * floorHeight + 1f,
+                        edgeZ * halfDepth
+                    );
+                }
+                else
+                {
+                    // Random position
+                    randomPos = new Vector3(
+                        Random.Range(-halfWidth, halfWidth),
+                        currentFloor * floorHeight + 1f,
+                        Random.Range(-halfDepth, halfDepth)
+                    );
+                }
+                break;
+                
+            default:
+                // Generate a random position for others
+                randomPos = new Vector3(
+                    Random.Range(-halfWidth, halfWidth),
+                    currentFloor * floorHeight + 1f,
+                    Random.Range(-halfDepth, halfDepth)
+                );
+                break;
         }
-        else
-        {
-            Debug.LogWarning($"{gameObject.name} generated random spot {randomPos} which is not on NavMesh. Using current position as target.");
-            currentNavTarget = transform.position; // Fallback: stay put or use a default safe spot
-        }
-
-        // --- Set Destination ---
-        Debug.Log($"{gameObject.name} moving to random spot: {currentNavTarget} on floor {currentFloor}");
-        navAgent.SetDestination(currentNavTarget);
-        navAgent.isStopped = false; // Ensure agent can move
-        currentState = PersonState.MovingToDestination; // Make sure state reflects movement
+        
+        // Ensure position is within safe limits
+        moveTarget = Vector3.ClampMagnitude(randomPos, positionClamp);
+        hasTarget = true;
+        isMovingToDestination = true;
     }
     
     // Move towards the current target
-    // private void MoveTowardsTarget()
-    // {
-    //     // Calculate direction to target
-    //     Vector3 moveDirection = (moveTarget - transform.position).normalized;
-        
-    //     // Cast ray forward to check for obstacles
-    //     RaycastHit hit;
-    //     bool hitObstacle = Physics.Raycast(transform.position, moveDirection, out hit, wallDetectionDistance);
-        
-    //     if (hitObstacle)
-    //     {
-    //         // FIXED: Here's the fix for wall detection - use layer or name instead of tag
-    //         // Don't use CompareTag - look at the name or layer instead
-    //         if (hit.collider.name.Contains("Wall"))
-    //         {
-    //             // Debug wall hit
-    //             Debug.DrawLine(transform.position, hit.point, Color.red, 0.5f);
-                
-    //             // Calculate avoidance direction
-    //             Vector3 avoidDirection = Vector3.Cross(Vector3.up, moveDirection).normalized;
-                
-    //             // Try left or right randomly
-    //             if (Random.value < 0.5f)
-    //             {
-    //                 avoidDirection = -avoidDirection;
-    //             }
-                
-    //             // Modify move direction to avoid obstacle
-    //             moveDirection = (moveDirection + avoidDirection * 1.5f).normalized;
-    //         }
-    //     }
-        
-    //     // Bangkok style - more varied movement patterns
-    //     if (isInRush)
-    //     {
-    //         // Direct movement when in a rush
-    //         moveDirection = Vector3.Lerp(moveDirection, (moveTarget - transform.position).normalized, 0.9f);
-    //     }
-    //     else if (personType == PersonType.Tourist)
-    //     {
-    //         // Tourists meander more
-    //         if (Random.value < 0.05f)
-    //         {
-    //             moveDirection = Quaternion.Euler(0, Random.Range(-15f, 15f), 0) * moveDirection;
-    //         }
-    //     }
-        
-    //     // Calculate speed with caps
-    //     float currentSpeed = Mathf.Min(moveSpeed, maxSpeed);
-    //     if (isInRush) currentSpeed = Mathf.Min(currentSpeed * rushSpeedMultiplier, maxSpeed);
-        
-    //     // Calculate new position with safe movement
-    //     Vector3 movement = moveDirection * currentSpeed * Time.deltaTime;
-        
-    //     // Apply position change with safety limits
-    //     Vector3 newPosition = transform.position + movement;
-        
-    //     // Ensure y position is maintained (don't fall through floors)
-    //     newPosition.y = currentFloor * floorHeight + 1f;
-        
-    //     // Apply safety clamping
-    //     if (Vector3.Distance(newPosition, transform.position) > maxSpeed * Time.deltaTime * 2)
-    //     {
-    //         // If movement is too large, normalize it to prevent stretching
-    //         Debug.LogWarning($"Person {gameObject.name} movement too large. Clamping.");
-    //         newPosition = transform.position + Vector3.ClampMagnitude(movement, maxSpeed * Time.deltaTime);
-    //     }
-        
-    //     transform.position = newPosition;
-        
-    //     // Rotate to face movement direction
-    //     if (moveDirection != Vector3.zero)
-    //     {
-    //         Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-    //         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10 * Time.deltaTime);
-    //     }
-        
-    //     // Check if we've reached the target
-    //     if (Vector2.Distance(
-    //         new Vector2(transform.position.x, transform.position.z),
-    //         new Vector2(moveTarget.x, moveTarget.z)) < targetReachedThreshold)
-    //     {
-    //         if (isMovingToDestination && !waitingForElevator)
-    //         {
-    //             isMovingToDestination = false;
-    //             hasTarget = false;
-    //             Debug.Log($"Person {gameObject.name} reached destination on floor {currentFloor}");
-                
-    //             // If this was a following order, clear it
-    //             if (isFollowingOrder && !waitingForElevator)
-    //             {
-    //                 isFollowingOrder = false;
-    //             }
-    //         }
-    //         else if (waitingForElevator)
-    //         {
-    //             isMovingToDestination = false;
-    //             Debug.Log($"Person {gameObject.name} reached elevator waiting area on floor {currentFloor}");
-    //             // Keep hasTarget true to stay close to the elevator
-    //         }
-    //     }
-    // }
-    
-    // Called when the NavMeshAgent reaches its destination
-    private void OnTargetReached()
+    private void MoveTowardsTarget()
     {
-        isMovingToDestination = false;
-        hasTarget = false;
-        Debug.Log($"Person {gameObject.name} reached destination on floor {currentFloor}");
-        // If this was a following order, clear it
-        if (isFollowingOrder && !waitingForElevator)
+        // Calculate direction to target
+        Vector3 moveDirection = (moveTarget - transform.position).normalized;
+        
+        // Cast ray forward to check for obstacles
+        RaycastHit hit;
+        bool hitObstacle = Physics.Raycast(transform.position, moveDirection, out hit, wallDetectionDistance);
+        
+        if (hitObstacle)
         {
-            isFollowingOrder = false;
+            // FIXED: Here's the fix for wall detection - use layer or name instead of tag
+            // Don't use CompareTag - look at the name or layer instead
+            if (hit.collider.name.Contains("Wall"))
+            {
+                // Debug wall hit
+                Debug.DrawLine(transform.position, hit.point, Color.red, 0.5f);
+                
+                // Calculate avoidance direction
+                Vector3 avoidDirection = Vector3.Cross(Vector3.up, moveDirection).normalized;
+                
+                // Try left or right randomly
+                if (Random.value < 0.5f)
+                {
+                    avoidDirection = -avoidDirection;
+                }
+                
+                // Modify move direction to avoid obstacle
+                moveDirection = (moveDirection + avoidDirection * 1.5f).normalized;
+            }
+        }
+        
+        // Bangkok style - more varied movement patterns
+        if (isInRush)
+        {
+            // Direct movement when in a rush
+            moveDirection = Vector3.Lerp(moveDirection, (moveTarget - transform.position).normalized, 0.9f);
+        }
+        else if (personType == PersonType.Tourist)
+        {
+            // Tourists meander more
+            if (Random.value < 0.05f)
+            {
+                moveDirection = Quaternion.Euler(0, Random.Range(-15f, 15f), 0) * moveDirection;
+            }
+        }
+        
+        // Calculate speed with caps
+        float currentSpeed = Mathf.Min(moveSpeed, maxSpeed);
+        if (isInRush) currentSpeed = Mathf.Min(currentSpeed * rushSpeedMultiplier, maxSpeed);
+        
+        // Calculate new position with safe movement
+        Vector3 movement = moveDirection * currentSpeed * Time.deltaTime;
+        
+        // Apply position change with safety limits
+        Vector3 newPosition = transform.position + movement;
+        
+        // Ensure y position is maintained (don't fall through floors)
+        newPosition.y = currentFloor * floorHeight + 1f;
+        
+        // Apply safety clamping
+        if (Vector3.Distance(newPosition, transform.position) > maxSpeed * Time.deltaTime * 2)
+        {
+            // If movement is too large, normalize it to prevent stretching
+            Debug.LogWarning($"Person {gameObject.name} movement too large. Clamping.");
+            newPosition = transform.position + Vector3.ClampMagnitude(movement, maxSpeed * Time.deltaTime);
+        }
+        
+        transform.position = newPosition;
+        
+        // Rotate to face movement direction
+        if (moveDirection != Vector3.zero)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10 * Time.deltaTime);
+        }
+        
+        // Check if we've reached the target
+        if (Vector2.Distance(
+            new Vector2(transform.position.x, transform.position.z),
+            new Vector2(moveTarget.x, moveTarget.z)) < targetReachedThreshold)
+        {
+            if (isMovingToDestination && !waitingForElevator)
+            {
+                isMovingToDestination = false;
+                hasTarget = false;
+                Debug.Log($"Person {gameObject.name} reached destination on floor {currentFloor}");
+                
+                // If this was a following order, clear it
+                if (isFollowingOrder && !waitingForElevator)
+                {
+                    isFollowingOrder = false;
+                }
+            }
+            else if (waitingForElevator)
+            {
+                isMovingToDestination = false;
+                Debug.Log($"Person {gameObject.name} reached elevator waiting area on floor {currentFloor}");
+                // Keep hasTarget true to stay close to the elevator
+            }
         }
     }
-
+    
     // Schedule the next action
     private void ScheduleNextAction()
     {

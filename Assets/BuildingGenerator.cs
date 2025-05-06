@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.AI.Navigation;
 
 public class EnhancedBuildingGenerator : MonoBehaviour
 {
@@ -45,7 +44,6 @@ public class EnhancedBuildingGenerator : MonoBehaviour
     // Debug flag to track initialization
     private bool hasInitialized = false;
 
-    [System.Obsolete]
     void Start()
     {
         // Generate the building if it hasn't been done yet
@@ -156,7 +154,6 @@ public class EnhancedBuildingGenerator : MonoBehaviour
     }
 
     // Clean up any existing objects that might conflict
-    [System.Obsolete]
     private void CleanExistingObjects()
     {
         // Find and destroy any existing elevators in the scene (not managed by us)
@@ -204,7 +201,7 @@ public class EnhancedBuildingGenerator : MonoBehaviour
         GenerateElevators();
 
         // Generate people
-        StartCoroutine(GeneratePeople());
+        GeneratePeople();
 
         // Finalize setup
         FinalizeSetup();
@@ -419,25 +416,20 @@ public class EnhancedBuildingGenerator : MonoBehaviour
             // Configure elevator
             elevatorComp.floorHeight = floorHeight;
             elevatorComp.topFloor = numberOfFloors - 1;
-            float elevatorWidth  = 1.8f;
-            float elevatorHeight = 2.5f;
-            float elevatorDepth  = 1.8f;
-            elevatorComp.SetElevatorSize(
-                new Vector3(elevatorWidth, elevatorHeight, elevatorDepth)
-            );
+
             elevators.Add(elevatorComp);
         }
 
         Debug.Log($"Generated {numberOfElevators} elevators.");
     }
 
-    private IEnumerator GeneratePeople()
+    private void GeneratePeople()
     {
         // Check if prefab is assigned
         if (personPrefab == null)
         {
             Debug.LogError("Person prefab is not assigned!");
-            yield break;
+            return;
         }
 
         int totalPeople = 0;
@@ -481,7 +473,6 @@ public class EnhancedBuildingGenerator : MonoBehaviour
         }
 
         Debug.Log($"Generated {totalPeople} people across {numberOfFloors} floors.");
-        yield break;
     }
 
     private void FinalizeSetup()
@@ -505,8 +496,6 @@ public class EnhancedBuildingGenerator : MonoBehaviour
 
         // ADDED: Make a few people immediately use elevators
         StartCoroutine(ForcePeopleToUseElevators());
-        var surface = gameObject.AddComponent<NavMeshSurface>();
-        surface.BuildNavMesh();
     }
 
     // ADDED: Force some people to use elevators right away

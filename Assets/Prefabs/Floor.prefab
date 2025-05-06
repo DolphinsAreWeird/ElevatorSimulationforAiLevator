@@ -13,13 +13,12 @@ GameObject:
   - component: {fileID: 4559893259780345112}
   - component: {fileID: 8908769789013761215}
   - component: {fileID: 2581908316637581696}
-  - component: {fileID: 6928041103890247750}
   m_Layer: 0
   m_Name: FloorMesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 2147483647
+  m_StaticEditorFlags: 0
   m_IsActive: 1
 --- !u!4 &4678123419352992163
 Transform:
@@ -328,27 +327,6 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 0}
---- !u!65 &6928041103890247750
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1324922524533597697}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 10, y: 0.1, z: 10}
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &9039858532739131234
 GameObject:
   m_ObjectHideFlags: 0
@@ -364,7 +342,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 2147483647
+  m_StaticEditorFlags: 0
   m_IsActive: 1
 --- !u!4 &2828136831706254270
 Transform:
@@ -396,4 +374,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   floorMeshTransform: {fileID: 4678123419352992163}
   floorSize: {x: 10, y: 10}
-  floorThickness: 0.1
+  floorThinkness: 0.1

@@ -1,42 +1,20 @@
 using UnityEngine;
-using UnityEngine.AI;
 using System.Collections;
 using System.Collections.Generic;
 
 public class Elevator : MonoBehaviour
 {
-    // [SerializeField]
-    // private ElevatorDoor door;
+    [SerializeField]
+    private ElevatorDoor door;
 
     [SerializeField]
     private List<EnhancedPerson> persons;
 
-    public void SetElevatorSize(Vector3 size)
+    public void SetEvelatorSize(Vector3 size)
     {
-        // 1) Scale the cabin mesh (child named "Cabin" or fallback)
-        var cabin = transform.Find("Cabin");
-        if (cabin != null) cabin.localScale = size;
-        else transform.localScale = size;
-
-        // 3) Add/update a BoxCollider on root
-        BoxCollider bc = GetComponent<BoxCollider>();
-        if (bc == null)
-        {
-            bc = gameObject.AddComponent<BoxCollider>();
-        }
-        // Now safe to set properties
-        bc.size = size;
-        bc.center = new Vector3(0, size.y * 0.5f, 0);
-
-        // 4) Block NavMesh when idle
-        NavMeshObstacle obs = GetComponent<NavMeshObstacle>();
-        if (obs == null)
-        {
-            obs = gameObject.AddComponent<NavMeshObstacle>();
-        }
-        obs.carving = true;
-        obs.size = size;
+        door.SetElevatorDoorSize(new Vector2(size.x, size.z));
     }
+
     public void AddPerson(EnhancedPerson person)
     {
         if (persons.Contains(person))
@@ -96,15 +74,11 @@ public class Elevator : MonoBehaviour
 
         Debug.Log($"Elevator {gameObject.name} - Initial position set to: {transform.position}");
 
-        // Initialize the persons list if not already initialized
-        if (persons == null)
-        {
-            persons = new List<EnhancedPerson>();
-        }
 
-        // Rest of the Awake method remains unchanged
+
+
         List<Floor> exampleFloor = new();
-        
+
         for (int i = 0; i < exampleFloor.Count; i++)
         {
             Debug.Log($"Requested floor: {exampleFloor[i]}");
@@ -551,20 +525,13 @@ public class Elevator : MonoBehaviour
             passengerCount++;
 
             EnhancedPerson person = child.GetComponent<EnhancedPerson>();
-            // Inside Elevator.cs NotifyPassengers()
-            // ... inside the loop ...
             if (person != null && person.targetFloor == currentFloor)
             {
                 exitingCount++;
-                // Update weight BEFORE they exit
+                // Update weight before removing
                 currentWeight -= person.weight;
-                // REMOVE person from internal list if you have one
-                persons.Remove(person); // Assuming 'persons' list tracks who is physically inside
-                // Call ExitElevator with elevator's transform
-                person.ExitElevator(this.transform); // <<< MODIFIED HERE
-                // NOTE: Person handles its own unparenting now
+                person.ExitElevator();
             }
-            // ...
         }
 
         Debug.Log($"Elevator {gameObject.name} has {passengerCount} passengers at floor {currentFloor}, {exitingCount} exiting");
